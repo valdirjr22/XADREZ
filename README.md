@@ -1,381 +1,291 @@
-#include <stdio.h>
-#include <stdbool.h> // Para usar bool
-#include <stdlib.h>  // Para abs() - usado em calculos de distancia e direcao
+import React, { useState, useEffect } from 'react';
 
-// Definicoes do tabuleiro e das pecas
-#define TABULEIRO_TAMANHO 8 // O tabuleiro e 8x8
-#define VAZIO '.'           // Representa uma casa vazia no tabuleiro
-#define TORRE 'T'           // Representa a Torre
-#define BISPO 'B'           // Representa o Bispo
-#define RAINHA 'R'          // Representa a Rainha
-#define CAVALO 'C'          // Representa o Cavalo
-#define OBSTACULO 'O'       // Usado no modulo mestre para simular bloqueios no caminho
+// Constantes para o tamanho do tabuleiro e as peças
+const BOARD_SIZE = 8;
+const PIECE_SYMBOLS = {
+    'wp': '♙', 'wr': '♖', 'wn': '♘', 'wb': '♗', 'wq': '♕', 'wk': '♔',
+    'bp': '♟', 'br': '♜', 'bn': '♞', 'bb': '♝', 'bq': '♛', 'bk': '♚',
+};
+// Estado inicial do tabuleiro com as peças em suas posições de início
+const INITIAL_BOARD = [
+    ['br', 'bn', 'bb', 'bq', 'bk', 'bb', 'bn', 'br'],
+    ['bp', 'bp', 'bp', 'bp', 'bp', 'bp', 'bp', 'bp'],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    [null, null, null, null, null, null, null, null],
+    ['wp', 'wp', 'wp', 'wp', 'wp', 'wp', 'wp', 'wp'],
+    ['wr', 'wn', 'wb', 'wq', 'wk', 'wb', 'wn', 'wr'],
+];
 
-// O tabuleiro de xadrez sera uma matriz de caracteres
-char tabuleiro[TABULEIRO_TAMANHO][TABULEIRO_TAMANHO];
+// Componente principal do jogo de xadrez
+export default function App() {
+    // Estado do tabuleiro: matriz 8x8 de strings (ex: 'wp' para peao branco) ou null para casas vazias
+    const [board, setBoard] = useState(INITIAL_BOARD);
+    // Estado da peça selecionada: {row, col} se uma peça foi clicada, null caso contrário
+    const [selectedPiece, setSelectedPiece] = useState(null);
+    // Estado do turno: 'w' para as brancas, 'b' para as pretas
+    const [turn, setTurn] = useState('w');
+    // Mensagens exibidas para o usuário durante o jogo
+    const [message, setMessage] = useState('Turno das Brancas');
 
-// Funcao para inicializar todas as casas do tabuleiro como vazias
-void inicializarTabuleiro() {
-    for (int i = 0; i < TABULEIRO_TAMANHO; i++) {
-        for (int j = 0; j < TABULEIRO_TAMANHO; j++) {
-            tabuleiro[i][j] = VAZIO;
+    // Função auxiliar para obter a cor de uma peça (primeiro caractere da string da peça)
+    const getPieceColor = (piece) => piece ? piece[0] : null;
+
+    // Função auxiliar para verificar se uma posição (linha, coluna) está dentro dos limites do tabuleiro
+    const isValidPosition = (r, c) => r >= 0 && r < BOARD_SIZE && c >= 0 && c < BOARD_SIZE;
+
+    /*
+     * Funções de validação de movimento para cada tipo de peça.
+     * Estas funções aplicam as estruturas de repetição e condições conforme o desafio do PDF.
+     */
+
+    // Valida o movimento do Peão (Pawn)
+    // Aplica múltiplas condições para diferentes tipos de movimento do peão
+    const canPawnMove = (startRow, startCol, endRow, endCol, pieceColor, boardState) => {
+        const direction = pieceColor === 'w' ? -1 : 1; // Brancas sobem (-1), Pretas descem (1)
+        const startRank = pieceColor === 'w' ? 6 : 1; // Linha inicial para o primeiro movimento do peão
+
+        const targetPiece = boardState[endRow][endCol];
+
+        // Movimento normal de uma casa para frente
+        // Condição: move uma casa na direção correta e a casa de destino está vazia
+        if (endCol === startCol && endRow === startRow + direction && !targetPiece) {
+            return true;
         }
-    }
-}
 
-// Funcao para imprimir o tabuleiro no console
-// Usada principalmente para visualizacao dos movimentos no modulo Aventureiro e Mestre (quando aplicavel)
-void imprimirTabuleiro() {
-    printf("\n  "); // Espaco para alinhamento dos indices das colunas
-    // Imprime os indices das colunas (0 a 7)
-    for (int j = 0; j < TABULEIRO_TAMANHO; j++) {
-        printf("%d ", j);
-    }
-    printf("\n"); // Nova linha apos os indices das colunas
-
-    // Imprime cada linha do tabuleiro com seu indice correspondente
-    for (int i = 0; i < TABULEIRO_TAMANHO; i++) {
-        printf("%d ", i); // Imprime o indice da linha
-        for (int j = 0; j < TABULEIRO_TAMANHO; j++) {
-            printf("%c ", tabuleiro[i][j]); // Imprime o caractere da casa
+        // Primeiro movimento de duas casas para frente
+        // Condições: está na linha inicial, move duas casas na direção correta,
+        // a casa de destino está vazia, e a casa intermediária também está vazia
+        if (startRow === startRank && endCol === startCol && endRow === startRow + 2 * direction && !targetPiece && !boardState[startRow + direction][startCol]) {
+            return true;
         }
-        printf("\n"); // Nova linha apos cada linha do tabuleiro
-    }
-}
 
-// --- MODULO NOVATO: MOVIMENTOS LINEARES COM IMPRESSAO DE DIRECOES ---
+        // Captura diagonal
+        // Condições: move uma casa na diagonal, há uma peça inimiga na casa de destino
+        if (Math.abs(endCol - startCol) === 1 && endRow === startRow + direction && targetPiece && getPieceColor(targetPiece) !== pieceColor) {
+            return true;
+        }
 
-// Simula o movimento da Torre: 5 casas para a direita usando 'for'
-// Requisito: Imprimir "Direita" a cada casa percorrida.
-void moverTorreNovato(int linhaInicial, int colunaInicial) {
-    printf("\nSimulando movimento da Torre de (%d, %d) (5 casas para a Direita):\n", linhaInicial, colunaInicial);
-    // Nota: O requisito do Nivel Novato pede apenas para imprimir a direcao, nao marcar no tabuleiro.
-    // O tabuleiro e apenas para visualizacao geral, entao nao sera impresso a cada passo aqui.
-
-    // Loop 'for' para mover 5 casas para a direita
-    for (int k = 0; k < 5; k++) { // k itera de 0 a 4, totalizando 5 passos
-        printf("Direita\n"); // Imprime a direcao a cada passo
-    }
-}
-
-// Simula o movimento do Bispo: 5 casas na diagonal para cima e a direita usando 'while'
-// Requisito: Imprimir "Cima, Direita" a cada casa percorrida.
-void moverBispoNovato(int linhaInicial, int colunaInicial) {
-    printf("\nSimulando movimento do Bispo de (%d, %d) (5 casas Cima, Direita):\n", linhaInicial, colunaInicial);
-    int passos = 0; // Contador de passos
-    // Loop 'while' para mover 5 casas na diagonal
-    while (passos < 5) {
-        printf("Cima, Direita\n"); // Imprime a direcao a cada passo
-        passos++; // Incrementa o contador de passos
-    }
-}
-
-// Simula o movimento da Rainha: 8 casas para a esquerda usando 'do-while'
-// Requisito: Imprimir "Esquerda" a cada casa percorrida.
-void moverRainhaNovato(int linhaInicial, int colunaInicial) {
-    printf("\nSimulando movimento da Rainha de (%d, %d) (8 casas para a Esquerda):\n", linhaInicial, colunaInicial);
-    int passos = 0; // Contador de passos
-
-    // Loop 'do-while' para mover 8 casas para a esquerda
-    // Garante que o loop execute pelo menos uma vez, e depois verifica a condicao
-    do {
-        printf("Esquerda\n"); // Imprime a direcao
-        passos++; // Incrementa o contador
-    } while (passos < 8); // Continua enquanto nao atingir 8 passos
-}
-
-// Funcao que executa as simulacoes do Modulo Novato
-void moduloNovato() {
-    printf("\n--- MODULO NOVATO: MOVIMENTOS BASICOS COM IMPRESSAO DE DIRECOES ---\n");
-    moverTorreNovato(3, 3);   // Exemplo: Torre na posicao (3,3)
-    moverBispoNovato(3, 3);   // Exemplo: Bispo na posicao (3,3)
-    moverRainhaNovato(3, 3);  // Exemplo: Rainha na posicao (3,3)
-    printf("\n--------------------------------------------------------------\n");
-}
-
-// --- MODULO AVENTUREIRO: MOVIMENTO DO CAVALO (LOOPS ANINHADOS) ---
-
-// Simula o movimento especifico do Cavalo: 2 casas para baixo e 1 para a esquerda
-// Requisito: Usar loops aninhados (um 'for' e um 'while' ou 'do-while')
-// e imprimir as direcoes "Baixo", "Baixo", "Esquerda".
-void moverCavaloAventureiro(int linhaInicial, int colunaInicial) {
-    printf("\nSimulando movimento do Cavalo de (%d, %d) (2 casas Baixo, 1 casa Esquerda):\n", linhaInicial, colunaInicial);
-    printf("\n"); // Separa o movimento do Cavalo dos anteriores
-
-    // Posiciona o Cavalo no tabuleiro para visualizacao final
-    inicializarTabuleiro();
-    tabuleiro[linhaInicial][colunaInicial] = CAVALO;
-
-    int currentLinha = linhaInicial;
-    int currentColuna = colunaInicial;
-
-    // Primeiro movimento: 2 casas para baixo
-    // Loop 'for' para os dois passos para baixo
-    for (int i = 0; i < 2; i++) {
-        printf("Baixo\n"); // Imprime a direcao
-        currentLinha++; // Atualiza a posicao conceitual (nao no tabuleiro, apenas para rastreio)
-    }
-
-    // Segundo movimento: 1 casa para a esquerda
-    // Loop 'while' para o passo para a esquerda
-    int j = 0;
-    while (j < 1) { // Apenas um passo
-        printf("Esquerda\n"); // Imprime a direcao
-        currentColuna--; // Atualiza a posicao conceitual
-        j++;
-    }
-
-    // Marca a posicao final do cavalo apos o movimento "L"
-    // Nota: O Cavalo de xadrez "pula" para a posicao final, nao percorre cada casa.
-    // Estamos simulando a sequencia de "direcoes" do L.
-    int linhaFinal = linhaInicial + 2;
-    int colunaFinal = colunaInicial - 1;
-
-    // Marca a posicao final no tabuleiro para visualizacao
-    if (linhaFinal >= 0 && linhaFinal < TABULEIRO_TAMANHO &&
-        colunaFinal >= 0 && colunaFinal < TABULEIRO_TAMANHO) {
-        tabuleiro[linhaFinal][colunaFinal] = CAVALO; // Marca a posicao final
-    }
-
-    imprimirTabuleiro(); // Imprime o tabuleiro final com a posicao do Cavalo
-
-    printf("\n--------------------------------------------------------------\n");
-}
-
-// Funcao que executa as simulacoes do Modulo Aventureiro
-void moduloAventureiro() {
-    printf("\n--- MODULO AVENTUREIRO: MOVIMENTO DO CAVALO COM LOOPS ANINHADOS ---\n");
-    moverCavaloAventureiro(3, 3); // Exemplo: Cavalo na posicao (3,3)
-}
-
-// --- MODULO MESTRE: RECURSIVIDADE E LOOPS COMPLEXOS ---
-
-// Funcao recursiva para simular o movimento da Torre em uma direcao
-// Requisitos: Substituir loops por recursividade, imprimir direcao a cada passo.
-// 'deltaLinha' e 'deltaColuna' definem a direcao (+1/-1/0)
-// 'passosRestantes' e o numero de casas que ainda precisa mover
-void moverTorreRecursivo(int linhaAtual, int colunaAtual, int passosRestantes, int deltaLinha, int deltaColuna) {
-    // Caso base: Se nao ha mais passos para dar ou se saiu do tabuleiro
-    if (passosRestantes <= 0 ||
-        linhaAtual < 0 || linhaAtual >= TABULEIRO_TAMANHO ||
-        colunaAtual < 0 || colunaAtual >= TABULEIRO_TAMANHO) {
-        return;
-    }
-
-    // Imprime a direcao do movimento
-    if (deltaLinha == 1 && deltaColuna == 0) {
-        printf("Baixo\n");
-    } else if (deltaLinha == -1 && deltaColuna == 0) {
-        printf("Cima\n");
-    } else if (deltaLinha == 0 && deltaColuna == 1) {
-        printf("Direita\n");
-    } else if (deltaLinha == 0 && deltaColuna == -1) {
-        printf("Esquerda\n");
-    }
-
-    // Chamada recursiva para o proximo passo
-    moverTorreRecursivo(linhaAtual + deltaLinha, colunaAtual + deltaColuna, passosRestantes - 1, deltaLinha, deltaColuna);
-}
-
-// Funcao recursiva para simular o movimento do Bispo em uma direcao diagonal
-// Requisitos: Substituir loops por recursividade, imprimir direcao a cada passo.
-// 'deltaLinha' e 'deltaColuna' definem a direcao diagonal (+1/-1)
-void moverBispoRecursivo(int linhaAtual, int colunaAtual, int passosRestantes, int deltaLinha, int deltaColuna) {
-    // Caso base
-    if (passosRestantes <= 0 ||
-        linhaAtual < 0 || linhaAtual >= TABULEIRO_TAMANHO ||
-        colunaAtual < 0 || colunaAtual >= TABULEIRO_TAMANHO) {
-        return;
-    }
-
-    // Imprime a direcao combinada
-    if (deltaLinha == -1 && deltaColuna == -1) {
-        printf("Cima Esquerda\n");
-    } else if (deltaLinha == -1 && deltaColuna == 1) {
-        printf("Cima Direita\n");
-    } else if (deltaLinha == 1 && deltaColuna == -1) {
-        printf("Baixo Esquerda\n");
-    } else if (deltaLinha == 1 && deltaColuna == 1) {
-        printf("Baixo Direita\n");
-    }
-
-    // Chamada recursiva para o proximo passo na diagonal
-    moverBispoRecursivo(linhaAtual + deltaLinha, colunaAtual + deltaColuna, passosRestantes - 1, deltaLinha, deltaColuna);
-}
-
-// Funcao recursiva para simular o movimento da Rainha
-// A Rainha pode se mover em qualquer direcao (Torre + Bispo)
-// Para simplificar a recursividade, esta funcao precisaria de uma forma mais complexa de iterar
-// por todas as 8 direcoes. Para fins de demonstracao de recursividade simples, vamos simular uma direcao especifica.
-// Requisito: Substituir loops por recursividade, imprimir direcao a cada passo.
-void moverRainhaRecursivo(int linhaAtual, int colunaAtual, int passosRestantes, int deltaLinha, int deltaColuna) {
-    // Caso base
-    if (passosRestantes <= 0 ||
-        linhaAtual < 0 || linhaAtual >= TABULEIRO_TAMANHO ||
-        colunaAtual < 0 || colunaAtual >= TABULEIRO_TAMANHO) {
-        return;
-    }
-
-    // Imprime a direcao. Esta parte seria mais complexa para Rainha real,
-    // mas para demonstrar recursividade, focamos em uma direcao.
-    if (deltaLinha == 1 && deltaColuna == 0) {
-        printf("Baixo\n");
-    } else if (deltaLinha == -1 && deltaColuna == 0) {
-        printf("Cima\n");
-    } else if (deltaLinha == 0 && deltaColuna == 1) {
-        printf("Direita\n");
-    } else if (deltaLinha == 0 && deltaColuna == -1) {
-        printf("Esquerda\n");
-    } else if (deltaLinha == -1 && deltaColuna == -1) {
-        printf("Cima Esquerda\n");
-    } else if (deltaLinha == -1 && deltaColuna == 1) {
-        printf("Cima Direita\n");
-    } else if (deltaLinha == 1 && deltaColuna == -1) {
-        printf("Baixo Esquerda\n");
-    } else if (deltaLinha == 1 && deltaColuna == 1) {
-        printf("Baixo Direita\n");
-    }
-
-    // Chamada recursiva
-    moverRainhaRecursivo(linhaAtual + deltaLinha, colunaAtual + deltaColuna, passosRestantes - 1, deltaLinha, deltaColuna);
-}
-
-
-// --- MOVIMENTO DO CAVALO COM LOOPS COMPLEXOS E CONDICOES (MODULO MESTRE) ---
-// Requisito: Aprimorar movimentacao do Cavalo para "duas casas para cima e uma para a direita".
-// Usar loops aninhados com multiplas variaveis e/ou condicoes. Pode usar 'continue' e 'break'.
-void moverCavaloMestre(int linhaInicial, int colunaInicial) {
-    printf("\nSimulando movimento do Cavalo de (%d, %d) (2 casas Cima, 1 casa Direita) - Loops Complexos:\n", linhaInicial, colunaInicial);
-    printf("\n"); // Linha em branco para separacao
-
-    // Para simular "loops aninhados com multiplas variaveis e/ou condicoes" para um movimento fixo como o do cavalo,
-    // vamos usar uma abordagem onde o loop externo controla a "fase" do movimento (vertical vs horizontal)
-    // e o interno itera sobre os passos dessa fase, com condicoes para parar/continuar.
-
-    // O movimento do cavalo e 2 casas na vertical e 1 na horizontal, ou vice-versa.
-    // Neste caso: 2 para cima (-2) e 1 para a direita (+1).
-    int movimentos_L[2][2] = {
-        {-2, 0}, // Primeira parte do L (vertical)
-        {0, 1}   // Segunda parte do L (horizontal)
+        return false; // Movimento inválido para o peão
     };
 
-    int currentLinha = linhaInicial;
-    int currentColuna = colunaInicial;
-
-    // Loop externo para iterar sobre as 'fases' do movimento do Cavalo (vertical, depois horizontal)
-    for (int k = 0; k < 2; k++) {
-        int deltaL = movimentos_L[k][0]; // Mudanca na linha para a fase atual
-        int deltaC = movimentos_L[k][1]; // Mudanca na coluna para a fase atual
-
-        // Loop interno para executar os passos da fase atual
-        // Multiplas variaveis e condicoes: 'i' para o contador, 'passos' para os passos esperados.
-        // Condicao de continue/break demonstrada de forma artificial para o proposito do desafio.
-        for (int i = 0, passos = (k == 0 ? 2 : 1); i < passos; i++) {
-            // Se deltaL for 0, eh um movimento horizontal; se deltaC for 0, eh vertical.
-            if (deltaL != 0) { // Movimento vertical
-                if (deltaL < 0) printf("Cima\n");
-                else printf("Baixo\n");
-                currentLinha += (deltaL / abs(deltaL)); // Move uma unidade na direcao
-            } else if (deltaC != 0) { // Movimento horizontal
-                if (deltaC < 0) printf("Esquerda\n");
-                else printf("Direita\n");
-                currentColuna += (deltaC / abs(deltaC)); // Move uma unidade na direcao
+    // Valida o movimento da Torre (Rook)
+    // Aplica loops 'for' para verificar o caminho linear (horizontal ou vertical)
+    const canRookMove = (startRow, startCol, endRow, endCol, boardState) => {
+        if (startRow === endRow) { // Movimento horizontal
+            const step = (endCol > startCol) ? 1 : -1; // Define a direção (direita ou esquerda)
+            // Loop 'for' para iterar por todas as casas no caminho
+            for (let c = startCol + step; c !== endCol; c += step) {
+                if (boardState[startRow][c]) return false; // Caminho bloqueado por outra peça
             }
-
-            // Exemplo de condicao 'continue' (contrived para demonstracao):
-            // Se o cavalo estivesse em uma borda, poderia 'continuar' sem marcar
-            if (currentLinha < 0 || currentLinha >= TABULEIRO_TAMANHO ||
-                currentColuna < 0 || currentColuna >= TABULEIRO_TAMANHO) {
-                //printf("Tentando mover para fora do tabuleiro, pulando...\n"); // Debug
-                continue; // Pula o resto da iteracao se a posicao for invalida (mas nao paramos o loop)
+            return true; // Caminho livre
+        } else if (startCol === endCol) { // Movimento vertical
+            const step = (endRow > startRow) ? 1 : -1; // Define a direção (para baixo ou para cima)
+            // Loop 'for' para iterar por todas as casas no caminho
+            for (let r = startRow + step; r !== endRow; r += step) {
+                if (boardState[r][startCol]) return false; // Caminho bloqueado por outra peça
             }
-
-            // Exemplo de condicao 'break' (contrived para demonstracao):
-            // Se atingir um 'obstaculo' ficticio no meio do movimento 'L'
-            // if (k == 0 && i == 0 && currentLinha == 5 && currentColuna == 3) { // Apos 1 passo vertical (Baixo)
-            //     printf("Obstaculo encontrado, interrompendo movimento L!\n");
-            //     break; // Interrompe o loop interno
-            // }
+            return true; // Caminho livre
         }
-    }
-    // Posicao final do Cavalo apos o movimento 'L' simulado
-    int finalLinha = linhaInicial + movimentos_L[0][0] + movimentos_L[1][0];
-    int finalColuna = colunaInicial + movimentos_L[0][1] + movimentos_L[1][1];
+        return false; // Não é um movimento horizontal ou vertical
+    };
 
-    inicializarTabuleiro(); // Limpa e posiciona o Cavalo no inicio e fim para visualizacao
-    tabuleiro[linhaInicial][colunaInicial] = CAVALO;
-    if (finalLinha >= 0 && finalLinha < TABULEIRO_TAMANHO &&
-        finalColuna >= 0 && finalColuna < TABULEIRO_TAMANHO) {
-        tabuleiro[finalLinha][finalColuna] = CAVALO; // Marca a posicao final
-    }
-    imprimirTabuleiro(); // Imprime o tabuleiro com a posicao final
+    // Valida o movimento do Cavalo (Knight)
+    // Verifica diretamente as 8 posições possíveis em "L" (aplicação conceitual de loops aninhados)
+    const canKnightMove = (startRow, startCol, endRow, endCol) => {
+        const dr = Math.abs(endRow - startRow); // Diferença absoluta de linhas
+        const dc = Math.abs(endCol - startCol); // Diferença absoluta de colunas
 
-    printf("\n--------------------------------------------------------------\n");
-}
+        // O movimento do cavalo é sempre um "L" (2 casas em uma direção e 1 na perpendicular)
+        return (dr === 2 && dc === 1) || (dr === 1 && dc === 2);
+    };
+
+    // Valida o movimento do Bispo (Bishop)
+    // Aplica loops 'while' para verificar o caminho diagonal
+    const canBishopMove = (startRow, startCol, endRow, endCol, boardState) => {
+        // Verifica se é um movimento diagonal (diferença de linha igual a diferença de coluna)
+        if (Math.abs(endRow - startRow) === Math.abs(endCol - startCol)) {
+            const rowStep = (endRow > startRow) ? 1 : -1; // Direção da linha (para baixo ou para cima)
+            const colStep = (endCol > startCol) ? 1 : -1; // Direção da coluna (para direita ou esquerda)
+
+            let r = startRow + rowStep;
+            let c = startCol + colStep;
+
+            // Loop 'while' para iterar por todas as casas na diagonal
+            while (r !== endRow && c !== endCol) {
+                if (boardState[r][c]) return false; // Caminho bloqueado por outra peça
+                r += rowStep;
+                c += colStep;
+            }
+            return true; // Caminho livre
+        }
+        return false; // Não é um movimento diagonal
+    };
+
+    // Valida o movimento da Rainha (Queen)
+    // Combina a lógica de movimento da Torre e do Bispo
+    const canQueenMove = (startRow, startCol, endRow, endCol, boardState) => {
+        // A Rainha pode se mover como uma Torre OU como um Bispo
+        return canRookMove(startRow, startCol, endRow, endCol, boardState) ||
+               canBishopMove(startRow, startCol, endRow, endCol, boardState);
+    };
+
+    // Valida o movimento do Rei (King)
+    // Aplica condições simples de distância
+    const canKingMove = (startRow, startCol, endRow, endCol) => {
+        const dr = Math.abs(endRow - startRow); // Diferença absoluta de linhas
+        const dc = Math.abs(endCol - startCol); // Diferença absoluta de colunas
+
+        // O Rei pode mover uma casa em qualquer direção (horizontal, vertical ou diagonal)
+        return dr <= 1 && dc <= 1;
+    };
 
 
-// --- BISPO COM LOOPS ANINHADOS (MODULO MESTRE) ---
-// Requisito: "o loop mais externo para o movimento vertical, e o mais interno para o movimento horizontal."
-// Esta e uma interpretacao para simular a varredura diagonal com loops aninhados
-// Nao e a forma mais eficiente de mover um bispo, mas atende ao requisito de estrutura de loop.
-void moverBispoAninhado(int linhaInicial, int colunaInicial) {
-    printf("\nSimulando movimento do Bispo de (%d, %d) com Loops Aninhados (vertical/horizontal):\n", linhaInicial, colunaInicial);
-    printf("\n"); // Linha em branco para separacao
+    // Função principal para validar qualquer movimento de peça
+    const isValidMove = (startRow, startCol, endRow, endCol) => {
+        const piece = board[startRow][startCol];
+        const pieceType = piece[1]; // 'p', 'r', 'n', 'b', 'q', 'k'
+        const pieceColor = piece[0]; // 'w' ou 'b'
+        const targetPiece = board[endRow][endCol];
+        const targetColor = getPieceColor(targetPiece);
 
-    inicializarTabuleiro();
-    tabuleiro[linhaInicial][colunaInicial] = BISPO; // Posiciona o Bispo
+        // Condições básicas de xadrez:
+        // 1. Não pode mover para a mesma casa
+        if (startRow === endRow && startCol === endCol) return false;
+        // 2. Não pode capturar uma peça da sua própria cor
+        if (targetPiece && targetColor === pieceColor) return false;
+        // 3. A posição final deve ser válida (dentro do tabuleiro)
+        if (!isValidPosition(endRow, endCol)) return false;
 
-    // Itera sobre as linhas (loop externo - vertical)
-    for (int i = 0; i < TABULEIRO_TAMANHO; i++) {
-        // Itera sobre as colunas (loop interno - horizontal)
-        for (int j = 0; j < TABULEIRO_TAMANHO; j++) {
-            // Condicao para verificar se a casa (i,j) esta na diagonal da posicao inicial
-            // abs(delta_linha) == abs(delta_coluna)
-            if (abs(i - linhaInicial) == abs(j - colunaInicial) &&
-                !(i == linhaInicial && j == colunaInicial)) { // Nao marca a propria posicao
-                tabuleiro[i][j] = '*'; // Marca a casa como parte de uma diagonal
+
+        // Delega a validação para a função específica de cada peça
+        switch (pieceType) {
+            case 'p': return canPawnMove(startRow, startCol, endRow, endCol, pieceColor, board);
+            case 'r': return canRookMove(startRow, startCol, endRow, endCol, board);
+            case 'n': return canKnightMove(startRow, startCol, endRow, endCol);
+            case 'b': return canBishopMove(startRow, startCol, endRow, endCol, board);
+            case 'q': return canQueenMove(startRow, startCol, endRow, endCol, board);
+            case 'k': return canKingMove(startRow, startCol, endRow, endCol);
+            default: return false; // Tipo de peça desconhecido
+        }
+    };
+
+    // Função para lidar com o clique em uma célula do tabuleiro
+    const handleSquareClick = (row, col) => {
+        // Se uma peça já foi selecionada anteriormente
+        if (selectedPiece) {
+            const { row: sr, col: sc } = selectedPiece; // Coordenadas da peça selecionada
+            const pieceToMove = board[sr][sc]; // A peça que será movida
+
+            // Tentar mover a peça selecionada para a nova casa clicada (destino)
+            if (isValidMove(sr, sc, row, col)) {
+                // Cria uma nova cópia do tabuleiro para manter a imutabilidade do estado no React
+                const newBoard = board.map(arr => [...arr]);
+
+                // Verifica se houve captura de peça
+                if (newBoard[row][col]) {
+                    setMessage(`${PIECE_SYMBOLS[pieceToMove]} capturou ${PIECE_SYMBOLS[newBoard[row][col]]}!`);
+                } else {
+                    setMessage('Movimento válido!');
+                }
+
+                newBoard[row][col] = pieceToMove; // Move a peça para a nova posição
+                newBoard[sr][sc] = null; // Limpa a posição anterior da peça
+
+                setBoard(newBoard); // Atualiza o estado do tabuleiro
+                setTurn(turn === 'w' ? 'b' : 'w'); // Troca o turno (brancas para pretas, pretas para brancas)
+                setSelectedPiece(null); // Desseleciona a peça após o movimento
+            } else {
+                // Se o movimento for inválido, exibe uma mensagem e desseleciona a peça
+                setMessage('Movimento inválido! Tente novamente.');
+                setSelectedPiece(null);
+            }
+        } else {
+            // Nenhuma peça selecionada, tentar selecionar uma peça na casa clicada
+            const clickedPiece = board[row][col];
+            // Só permite selecionar uma peça se a casa não estiver vazia e a peça for da cor do turno atual
+            if (clickedPiece && getPieceColor(clickedPiece) === turn) {
+                setSelectedPiece({ row, col }); // Define a peça clicada como selecionada
+                setMessage(`Peça ${PIECE_SYMBOLS[clickedPiece]} selecionada. Escolha um destino.`);
+            } else if (clickedPiece && getPieceColor(clickedPiece) !== turn) {
+                // Se clicou em uma peça do oponente
+                setMessage('Essa peça não é sua! Escolha uma peça da sua cor.');
+            } else {
+                // Se clicou em uma casa vazia sem peça selecionada
+                setMessage('Nenhuma peça selecionada. Clique em uma peça sua para mover.');
             }
         }
-    }
-    imprimirTabuleiro();
+    };
 
-    printf("\n--------------------------------------------------------------\n");
-}
+    // Função para reiniciar o jogo para o estado inicial
+    const resetGame = () => {
+        setBoard(INITIAL_BOARD);
+        setSelectedPiece(null);
+        setTurn('w');
+        setMessage('Jogo Reiniciado. Turno das Brancas');
+    };
+
+    // Efeito colateral para atualizar a mensagem do turno sempre que o 'turn' mudar
+    useEffect(() => {
+        setMessage(`Turno das ${turn === 'w' ? 'Brancas' : 'Pretas'}`);
+    }, [turn]);
 
 
-// Funcao que executa as simulacoes do Modulo Mestre
-void moduloMestre() {
-    printf("\n--- MODULO MESTRE: RECURSIVIDADE E LOOPS COMPLEXOS ---\n");
+    return (
+        <div className="bg-gray-100 text-gray-900 p-4 min-h-screen flex flex-col items-center justify-center">
+            <div className="container mx-auto p-6 bg-white shadow-lg rounded-lg max-w-4xl w-full flex flex-col items-center">
+                <h1 className="text-4xl font-extrabold text-center mb-6 text-indigo-800 animate-pulse">Xadrez</h1>
+                <p className="text-center text-lg mb-8 text-gray-700">Mostre suas tecnicas</p>
 
-    printf("\n--- Movimento da Torre Recursivo (5 casas para a Esquerda) ---\n");
-    moverTorreRecursivo(3, 3, 5, 0, -1); // Exemplo: Torre da (3,3), 5 casas para a Esquerda
-    printf("\n"); // Linha em branco para separar as saidas
+                <div className="flex flex-col md:flex-row gap-8 w-full justify-center items-center">
+                    {/* Painel de Mensagens e Controles */}
+                    <div className="md:w-1/3 p-4 bg-indigo-50 rounded-lg shadow-inner flex flex-col justify-between h-48 md:h-80">
+                        <div>
+                            <h2 className="text-2xl font-semibold mb-3 text-indigo-700">Estado do Jogo</h2>
+                            <p className="text-xl font-bold text-gray-800 mb-4">{message}</p>
+                        </div>
+                        <button
+                            onClick={resetGame}
+                            className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-xl shadow-md transition duration-300 ease-in-out transform hover:scale-105"
+                        >
+                            Reiniciar Jogo
+                        </button>
+                    </div>
 
-    printf("\n--- Movimento do Bispo Recursivo (5 casas Cima Direita) ---\n");
-    moverBispoRecursivo(3, 3, 5, -1, 1); // Exemplo: Bispo da (3,3), 5 casas Cima Direita
-    printf("\n"); // Linha em branco para separar as saidas
+                    {/* Tabuleiro de Xadrez */}
+                    <div className="md:w-2/3 flex justify-center items-center p-4 bg-gray-50 rounded-lg shadow-xl">
+                        <div className="board-grid grid grid-cols-8 grid-rows-8 border-4 border-gray-700 rounded-lg overflow-hidden">
+                            {board.map((row, rowIndex) => (
+                                row.map((piece, colIndex) => {
+                                    // Determina a cor da casa (clara/escura)
+                                    const isLightSquare = (rowIndex + colIndex) % 2 === 0;
+                                    const squareColorClass = isLightSquare ? 'bg-amber-100' : 'bg-amber-700'; // Cores amadeiradas
 
-    printf("\n--- Movimento da Rainha Recursivo (8 casas para Baixo) ---\n");
-    moverRainhaRecursivo(3, 3, 8, 1, 0); // Exemplo: Rainha da (3,3), 8 casas para Baixo
-    printf("\n"); // Linha em branco para separar as saidas
+                                    // Adiciona estilo para a casa selecionada
+                                    const isSelected = selectedPiece && selectedPiece.row === rowIndex && selectedPiece.col === colIndex;
+                                    const selectedClass = isSelected ? 'ring-4 ring-blue-500 ring-offset-2' : '';
 
-    // Chamada para o Cavalo com loops complexos
-    moverCavaloMestre(3, 3); // Exemplo: Cavalo na posicao (3,3)
-
-    // Chamada para o Bispo com loops aninhados (requisito especifico do modulo mestre)
-    moverBispoAninhado(3, 3); // Exemplo: Bispo na posicao (3,3)
-}
-
-// Funcao principal que inicia o jogo e chama os modulos
-int main() {
-    printf("Bem-vindo ao Xadrez Virtual da MateCheck!\n");
-    printf("Este programa demonstra os movimentos das pecas de xadrez usando estruturas de repeticao em C, conforme os desafios Novato, Aventureiro e Mestre.\n");
-
-    moduloNovato();
-    moduloAventureiro();
-    moduloMestre();
-
-    printf("\nJornada de programacao concluida! Voce dominou os movimentos do xadrez com C!\n");
-
-    return 0; // Indica que o programa terminou com sucesso
+                                    return (
+                                        <div
+                                            key={`${rowIndex}-${colIndex}`}
+                                            className={`w-10 h-10 md:w-12 md:h-12 flex justify-center items-center text-3xl md:text-4xl cursor-pointer select-none transition-all duration-100 ${squareColorClass} ${selectedClass} rounded-sm`}
+                                            onClick={() => handleSquareClick(rowIndex, colIndex)}
+                                        >
+                                            <span className={`piece-symbol ${piece && getPieceColor(piece) === 'w' ? 'text-white drop-shadow-md' : 'text-gray-900 drop-shadow-md'}`}>
+                                                {piece ? PIECE_SYMBOLS[piece] : ''}
+                                            </span>
+                                        </div>
+                                    );
+                                })
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <p className="text-sm mt-8 text-gray-500">
+                    Desenvolvido para Iniciante 
+                </p>
+            </div>
+        </div>
+    );
 }
